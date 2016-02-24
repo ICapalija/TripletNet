@@ -1,9 +1,8 @@
-<<<<<<< HEAD
 Deep Metric Learning Using Triplet Network
 ==========================================
 This code replicates the results from the paper “Deep metric learning using Triplet network” (http://arxiv.org/abs/1412.6622).
 
-It can train a TripletNet on any of the {Cifar10/100, STL10, SVHN, MNIST} datasets.
+It can train a TripletNet on any of the {Cifar10/100, STL10, SVHN, MNIST, VIPeR} datasets.
 
 ##Data
 You can get the needed data using the following repos:
@@ -11,6 +10,7 @@ You can get the needed data using the following repos:
 * STL10: https://github.com/eladhoffer/stl10.torch
 * SVHN: https://github.com/torch/tutorials/blob/master/A_datasets/svhn.lua
 * MNIST: https://github.com/andresy/mnist
+* VIPeR: https://github.com/ICapalija/viper.torch
 
 ##Dependencies
 * Torch (http://torch.ch)
@@ -48,6 +48,7 @@ th Main.lua -dataset Cifar10 -LR 0.1 -save new_exp_dir
 |load             |  none                | load existing net weights
 |save             |  time-identifier     | save directory
 |dataset          |  Cifar10             | Dataset - Cifar10, Cifar100, STL10, SVHN, MNIST
+|size          | 640000			| Size of training list
 |normalize        |  1                   | 1 - normalize using only 1 mean and std values
 |whiten           |  false               | whiten data
 |augment          |  false               | Augment training data
