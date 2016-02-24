@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 Deep Metric Learning Using Triplet Network
 ==========================================
 This code replicates the results from the paper “Deep metric learning using Triplet network” (http://arxiv.org/abs/1412.6622).
@@ -39,6 +40,8 @@ th Main.lua -dataset Cifar10 -LR 0.1 -save new_exp_dir
 |batchSize        |  128                 | batch size
 |optimization     |  sgd                 | optimization method
 |epoch            |  -1                  | number of epochs to train (-1 for unbounded)
+|earlyStop		  |  7					 | stop training if validation error is increasing 7 times in a row
+|splitTrainVal	  | 0.8					 | split train set into train (80%) and validation (20%) set
 |threads          |  8                   | number of threads
 |type             |  cuda                | float or cuda
 |devid            |  1                   | device ID (if using CUDA)
@@ -49,3 +52,6 @@ th Main.lua -dataset Cifar10 -LR 0.1 -save new_exp_dir
 |whiten           |  false               | whiten data
 |augment          |  false               | Augment training data
 |preProcDir       |  ./PreProcData/      | Data for pre-processing (means,Pinv,P)
+=======
+# TripletNet
+>>>>>>> 489a9cdbfa21c1dc7c00d6f67c39ab03c01d151a
