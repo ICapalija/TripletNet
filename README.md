@@ -53,6 +53,5 @@ th Main.lua -dataset Cifar10 -LR 0.1 -save new_exp_dir
 |whiten           |  false               | whiten data
 |augment          |  false               | Augment training data
 |preProcDir       |  ./PreProcData/      | Data for pre-processing (means,Pinv,P)
-=======
-# TripletNet
->>>>>>> 489a9cdbfa21c1dc7c00d6f67c39ab03c01d151a
+
+
