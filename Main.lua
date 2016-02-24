@@ -19,15 +19,17 @@ cmd:text('==>Options')
 
 cmd:text('===>Model And Training Regime')
 cmd:option('-modelsFolder',       './Models/',            'Models Folder')
-cmd:option('-network',            'Model.lua',            'embedding network file - must return valid network.')
+-- cmd:option('-network',            'Model.lua',            'embedding network file - must return valid network.')
+cmd:option('-network',            'ModelCuDNN.lua',            'embedding network file - must return valid network.')
 cmd:option('-LR',                 0.1,                    'learning rate')
 cmd:option('-LRDecay',            1e-6,                   'learning rate decay (in # samples)')
 cmd:option('-weightDecay',        1e-4,                   'L2 penalty on the weights')
 cmd:option('-momentum',           0.9,                    'momentum')
 cmd:option('-batchSize',          128,                    'batch size')
 cmd:option('-optimization',       'sgd',                  'optimization method')
-cmd:option('-epoch',              -1,                     'number of epochs to train, -1 for unbounded')
-
+cmd:option('-epoch',              22,                     'number of epochs to train, -1 for unbounded')
+cmd:option('-earlyStop',	7,	'stop training if validation error is increasing M times in a row')
+cmd:option('-splitTrainVal',	0.8,	'split test set into test (80%) and validation (20%) set')
 cmd:text('===>Platform Optimization')
 cmd:option('-threads',            8,                      'number of threads')
 cmd:option('-type',               'cuda',                 'float or cuda')
@@ -85,12 +87,14 @@ end
 local data = require 'Data'
 local SizeTrain = opt.size or 640000
 local SizeTest = SizeTrain*0.1
+local SizeValidation = SizeTrain*0.1
 
 function ReGenerateTrain()
     return GenerateList(data.TrainData.label,3, SizeTrain)
 end
 local TrainList = ReGenerateTrain()
 local TestList = GenerateList(data.TestData.label,3, SizeTest)
+local ValidationList = GenerateList(data.ValidationData.label,3, SizeTest)
 
 
 ------------------------- Output files configuration -----------------
@@ -122,6 +126,13 @@ local TrainDataContainer = DataContainer{
 local TestDataContainer = DataContainer{
     Data = data.TestData.data,
     List = TestList,
+    TensorType = 'torch.CudaTensor',
+    BatchSize = opt.batchSize
+}
+
+local ValidationDataContainer = DataContainer{
+    Data = data.ValidationData.data,
+    List = ValidationList,
     TensorType = 'torch.CudaTensor',
     BatchSize = opt.batchSize
 }
@@ -160,12 +171,10 @@ function Train(DataC)
 
     while x do
         local y = optimizer:optimize({x[1],x[2],x[3]}, 1)
-
         err = err + ErrorCount(y)
         xlua.progress(num*opt.batchSize, DataC:size())
         num = num + 1
         x = DataC:GetNextBatch()
-
     end
     return (err/DataC:size())
 end
@@ -180,32 +189,102 @@ function Test(DataC)
         local y = TripletNet:forward({x[1],x[2],x[3]})
         err = err + ErrorCount(y)
         xlua.progress(num*opt.batchSize, DataC:size())
-        num = num +1
+        num = num + 1
         x = DataC:GetNextBatch()
     end
     return (err/DataC:size())
 end
 
 
-local epoch = 1
+local epochCount = 1
+local minValidationError = 1
+local earlyStoppingCount = 0
 print '\n==> Starting Training\n'
-while epoch ~= opt.epoch do
-    print('Epoch ' .. epoch)
-    local ErrTrain = Train(TrainDataContainer)
-    torch.save(weights_filename, Weights)
-    print('Training Error = ' .. ErrTrain)
-    local ErrTest = Test(TestDataContainer)
-    print('Test Error = ' .. ErrTest)
-    Log:add{['Training Error']= ErrTrain* 100, ['Test Error'] = ErrTest* 100}
-    Log:style{['Training Error'] = '-', ['Test Error'] = '-'}
-    Log:plot()
-
-    if opt.visualize then
-        require 'image'
-        local weights = EmbeddingNet:get(1).weight:clone()
-        --win = image.display(weights,5,nil,nil,nil,win)
-        image.saveJPG(paths.concat(opt.save,'Filters_epoch'.. epoch .. '.jpg'), image.toDisplayTensor(weights))
-    end
-
-    epoch = epoch+1
+while epochCount <= opt.epoch do
+    print('Epoch ' .. epochCount .. '/' .. opt.epoch)
+    
+	--train 
+	local ErrTrain = Train(TrainDataContainer)
+	print('Training Error = ' .. ErrTrain)
+    
+	--test on validation set
+    local ErrValidation = Test(ValidationDataContainer)
+    print('Validation Error = ' .. ErrValidation)
+	
+	--update validation error
+	if minValidationError > ErrValidation then
+		minValidationError = ErrValidation
+		earlyStoppingCount = 0
+		--save weights
+		torch.save(weights_filename, Weights)
+	else
+		earlyStoppingCount = earlyStoppingCount + 1
+	end
+	
+	--check if early stopping is satisfied
+	if earlyStoppingCount >= opt.earlyStop then
+		print("\nEarly stop!")
+		break
+	end
+	  
+    epochCount = epochCount + 1
 end
+
+--Load weights with min validation error
+w = torch.load(weights_filename)
+Weights:copy(w)
+
+--Final results
+print("\n______________________________________\n")
+--local ErrTrain = Train(TrainDataContainer)
+--print('Training Error = ' .. ErrTrain)
+local ErrValidation = Test(ValidationDataContainer)
+print('Validation Error = ' .. ErrValidation)
+local ErrTest = Test(TestDataContainer)
+print('Test Error = ' .. ErrTest)
+
+--Save new features
+--Save test features
+data.TestData.data = data.TestData.data:cuda()
+file_test = io.open("new_features_test.txt", "w")
+for i=1,data.TestData.data:size(1) do
+        e = EmbeddingNet:forward(data.TestData.data[i])
+        for j=1,e:size()[1] do
+                file_test:write(e[j])
+                file_test:write(" ")
+        end
+        file_test:write(">")
+        file_test:write(data.TestData.label[i])
+        file_test:write("\n")
+end
+
+--Save train features
+--EmbeddingNet:cuda()
+--EmbeddingNet:float()
+data.TrainData.data = data.TrainData.data:cuda()
+file_train = io.open("new_features_train.txt", "w")
+for i=1,data.TrainData.data:size(1) do
+	e = EmbeddingNet:forward(data.TrainData.data[i])
+	for j=1,e:size()[1] do
+		file_train:write(e[j])
+		file_train:write(" ")
+	end
+	file_train:write(">")
+	file_train:write(data.TrainData.label[i])
+	file_train:write("\n")
+end
+
+--Save validation features
+data.ValidationData.data = data.ValidationData.data:cuda()
+file_valid = io.open("new_features_valid.txt", "w")
+for i=1,data.ValidationData.data:size(1) do
+        e = EmbeddingNet:forward(data.ValidationData.data[i])
+        for j=1,e:size()[1] do
+                file_valid:write(e[j])
+                file_valid:write(" ")
+        end
+        file_valid:write(">")
+        file_valid:write(data.TrainData.label[i])
+        file_valid:write("\n")
+end
+
